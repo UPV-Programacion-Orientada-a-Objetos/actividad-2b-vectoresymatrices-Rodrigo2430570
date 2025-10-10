@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
-
-using namespace std;
+#include <cstring>
+#include <limits>
 
 // Estructura de lote
 typedef struct {
@@ -21,18 +21,18 @@ struct PilaInspecciones {
 
 // Utilidades de entrada
 void limpiarBufferEntrada() {
-    if (cin.peek() == '\n') cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    if (std::cin.peek() == '\n') std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-void leerLinea(const string &prompt, string &out) {
-    cout << prompt;
+void leerLinea(const std::string &prompt, std::string &out) {
+    std::cout << prompt;
     limpiarBufferEntrada();
-    getline(cin, out);
+    std::getline(std::cin, out);
 }
 
-// Gestion del almacen 2D
-LoteProduccion** crearAlmacen(int F, int C) {
-    LoteProduccion **almacen = new LoteProduccion*[F];
+// Gestion del almacen 2D (matriz de punteros a LoteProduccion)
+LoteProduccion*** crearAlmacen(int F, int C) {
+    LoteProduccion ***almacen = new LoteProduccion**[F];
     for (int i = 0; i < F; ++i) {
         almacen[i] = new LoteProduccion*[C];
         for (int j = 0; j < C; ++j) {
@@ -42,7 +42,7 @@ LoteProduccion** crearAlmacen(int F, int C) {
     return almacen;
 }
 
-void liberarAlmacen(LoteProduccion **&almacen, int F) {
+void liberarAlmacen(LoteProduccion ***&almacen, int F) {
     if (!almacen) return;
     for (int i = 0; i < F; ++i) {
         delete[] almacen[i];
@@ -77,6 +77,33 @@ int buscarIndicePorID(LoteProduccion *maestro, int *ocupado, int capacidad, int 
         if (ocupado[i] == 1 && maestro[i].idLote == id) return i;
     }
     return -1;
+}
+
+// Expandir maestro (duplicar capacidad)
+void expandirMaestro(LoteProduccion *&maestro, int *&ocupado, int &capacidad) {
+    int nuevaCap = (capacidad > 0) ? capacidad * 2 : 1;
+    LoteProduccion *nuevoMaestro = new LoteProduccion[nuevaCap];
+    int *nuevoOcupado = new int[nuevaCap];
+    for (int i = 0; i < nuevaCap; ++i) nuevoOcupado[i] = 0;
+    for (int i = 0; i < capacidad; ++i) {
+        nuevoMaestro[i] = maestro[i];
+        nuevoOcupado[i] = ocupado[i];
+    }
+    delete[] maestro;
+    delete[] ocupado;
+    maestro = nuevoMaestro;
+    ocupado = nuevoOcupado;
+    capacidad = nuevaCap;
+}
+
+// Obtener índice libre, expandiendo si es necesario
+int obtenerIndiceLibre(LoteProduccion *&maestro, int *&ocupado, int &capacidad) {
+    int idx = buscarIndiceLibre(ocupado, capacidad);
+    if (idx == -1) {
+        expandirMaestro(maestro, ocupado, capacidad);
+        idx = buscarIndiceLibre(ocupado, capacidad);
+    }
+    return idx;
 }
 
 // Gestion de la pila
@@ -117,34 +144,76 @@ bool popInspeccion(PilaInspecciones &pila, int &idLote, int &resultado) {
 
 // Interfaz de usuario
 void mostrarMenu() {
-    cout << "\n--- Menu Principal ---\n";
-    cout << "1) Inicializar Almacen\n";
-    cout << "2) Colocar Lote\n";
-    cout << "3) Control de Calidad (Push)\n";
-    cout << "4) Deshacer (Pop)\n";
-    cout << "5) Reporte por Fila\n";
-    cout << "7) Salir\n";
-    cout << "Opcion: ";
+    std::cout << "\n--- Menu Principal ---\n";
+    std::cout << "1) Inicializar Almacen\n";
+    std::cout << "2) Colocar Lote\n";
+    std::cout << "3) Control de Calidad (Push)\n";
+    std::cout << "4) Deshacer (Pop)\n";
+    std::cout << "5) Reporte por Fila\n";
+    std::cout << "6) Buscar por Componente\n";
+    std::cout << "7) Redimensionar Almacen\n";
+    std::cout << "8) Salir\n";
+    std::cout << "Opcion: ";
 }
 
-void reportePorFila(LoteProduccion **almacen, int F, int C, int fila) {
-    cout << "--- Reporte de Fila " << fila << " ---\n";
+void reportePorFila(LoteProduccion ***almacen, int F, int C, int fila) {
+    std::cout << "--- Reporte de Fila " << fila << " ---\n";
     for (int j = 0; j < C; ++j) {
-        cout << "(" << fila << ", " << j << "): ";
+        std::cout << "(" << fila << ", " << j << "): ";
         if (almacen[fila][j] == nullptr) {
-            cout << "Vacio\n";
+            std::cout << "Vacio\n";
         } else {
-            cout << "ID: " << almacen[fila][j]->idLote
-                 << ", Nombre: " << almacen[fila][j]->nombreComponente << "\n";
+            std::cout << "ID: " << almacen[fila][j]->idLote
+                      << ", Nombre: " << almacen[fila][j]->nombreComponente << "\n";
         }
     }
 }
 
+// Buscar por componente recorriendo el almacen (muestra todas las coincidencias)
+void buscarPorComponente(LoteProduccion ***almacen, int F, int C, const char *nombre) {
+    bool encontrado = false;
+    for (int i = 0; i < F; ++i) {
+        for (int j = 0; j < C; ++j) {
+            if (almacen[i][j] && std::strcmp(almacen[i][j]->nombreComponente, nombre) == 0) {
+                std::cout << "Encontrado en (" << i << ", " << j << ") | Cantidad: "
+                          << almacen[i][j]->cantidadTotal << "\n";
+                encontrado = true;
+            }
+        }
+    }
+    if (!encontrado) {
+        std::cout << "No se encontro el componente.\n";
+    }
+}
+
+// Redimensionar almacen preservando punteros
+bool redimensionarAlmacen(LoteProduccion ***&almacen, int &F, int &C, int nuevoF, int nuevoC) {
+    if (!almacen || nuevoF <= 0 || nuevoC <= 0) return false;
+    LoteProduccion ***nuevo = new LoteProduccion**[nuevoF];
+    for (int i = 0; i < nuevoF; ++i) {
+    nuevo[i] = new LoteProduccion*[nuevoC];
+        for (int j = 0; j < nuevoC; ++j) nuevo[i][j] = nullptr;
+    }
+    int minF = (F < nuevoF ? F : nuevoF);
+    int minC = (C < nuevoC ? C : nuevoC);
+    for (int i = 0; i < minF; ++i) {
+        for (int j = 0; j < minC; ++j) {
+            nuevo[i][j] = almacen[i][j];
+        }
+    }
+    // liberar antiguo
+    for (int i = 0; i < F; ++i) delete[] almacen[i];
+    delete[] almacen;
+    almacen = nuevo;
+    F = nuevoF; C = nuevoC;
+    return true;
+}
+
 // Programa principal
 int main() {
-    cout << "--- AlphaTech: Control de Lotes Dinamicos ---\n";
+    std::cout << "--- AlphaTech: Control de Lotes Dinamicos ---\n";
 
-    LoteProduccion **almacen = nullptr;
+    LoteProduccion ***almacen = nullptr;
     int F = 0, C = 0;
 
     LoteProduccion *maestroLotes = nullptr;
@@ -160,7 +229,7 @@ int main() {
     bool salir = false;
     while (!salir) {
         mostrarMenu();
-        int opcion; cin >> opcion;
+        int opcion; std::cin >> opcion;
 
         switch (opcion) {
             case 1: {
@@ -168,46 +237,41 @@ int main() {
                     liberarAlmacen(almacen, F);
                     F = C = 0;
                 }
-                cout << "Fila inicial: "; cin >> F;
-                cout << "Columna inicial: "; cin >> C;
+                std::cout << "Fila inicial: "; std::cin >> F;
+                std::cout << "Columna inicial: "; std::cin >> C;
                 if (F <= 0 || C <= 0) {
-                    cout << "Dimensiones invalidas.\n";
+                    std::cout << "Dimensiones invalidas.\n";
                     F = C = 0;
                     break;
                 }
                 almacen = crearAlmacen(F, C);
                 inicializado = true;
-                cout << "\nInicializacion exitosa. Almacen " << F << "x" << C
-                     << " creado. Capacidad Maestro: " << capacidadMaestro << ".\n";
+                std::cout << "\nInicializacion exitosa. Almacen " << F << "x" << C
+                          << " creado. Capacidad Maestro: " << capacidadMaestro << ".\n";
                 break;
             }
             case 2: {
-                if (!inicializado) { cout << "Debe inicializar el almacen primero.\n"; break; }
+                if (!inicializado) { std::cout << "Debe inicializar el almacen primero.\n"; break; }
                 int f, c;
-                cout << "Posicion (F C): "; cin >> f >> c;
+                std::cout << "Posicion (F C): "; std::cin >> f >> c;
                 if (f < 0 || f >= F || c < 0 || c >= C) {
-                    cout << "Posicion fuera de rango.\n";
+                    std::cout << "Posicion fuera de rango.\n";
                     break;
                 }
                 if (almacen[f][c] != nullptr) {
-                    cout << "La celda ya esta ocupada.\n";
+                    std::cout << "La celda ya esta ocupada.\n";
                     break;
                 }
+                int idxLibre = obtenerIndiceLibre(maestroLotes, ocupado, capacidadMaestro);
 
-                int idxLibre = buscarIndiceLibre(ocupado, capacidadMaestro);
-                if (idxLibre == -1) {
-                    cout << "Maestro de lotes lleno.\n";
-                    break;
-                }
-
-                int id; float peso; int cantidad; string nombre;
-                cout << "ID: "; cin >> id;
+                int id; float peso; int cantidad; std::string nombre;
+                std::cout << "ID: "; std::cin >> id;
                 leerLinea("Nombre: ", nombre);
-                cout << "Peso Unitario: "; cin >> peso;
-                cout << "Cantidad Total: "; cin >> cantidad;
+                std::cout << "Peso Unitario: "; std::cin >> peso;
+                std::cout << "Cantidad Total: "; std::cin >> cantidad;
 
                 maestroLotes[idxLibre].idLote = id;
-                strncpy(maestroLotes[idxLibre].nombreComponente, nombre.c_str(), 
+                std::strncpy(maestroLotes[idxLibre].nombreComponente, nombre.c_str(), 
                         sizeof(maestroLotes[idxLibre].nombreComponente) - 1);
                 maestroLotes[idxLibre].nombreComponente[sizeof(maestroLotes[idxLibre].nombreComponente) - 1] = '\0';
                 maestroLotes[idxLibre].pesoUnitario = peso;
@@ -216,63 +280,82 @@ int main() {
 
                 almacen[f][c] = &maestroLotes[idxLibre];
 
-                cout << "Lote " << id << " (" << maestroLotes[idxLibre].nombreComponente
-                     << ") registrado y colocado en (" << f << ", " << c << ").\n";
+                std::cout << "Lote " << id << " (" << maestroLotes[idxLibre].nombreComponente
+                          << ") registrado y colocado en (" << f << ", " << c << ").\n";
                 break;
             }
             case 3: {
-                if (!inicializado) { cout << "Debe inicializar el almacen primero.\n"; break; }
+                if (!inicializado) { std::cout << "Debe inicializar el almacen primero.\n"; break; }
                 int id; int res;
-                cout << "ID de Lote a inspeccionar: "; cin >> id;
+                std::cout << "ID de Lote a inspeccionar: "; std::cin >> id;
                 int idx = buscarIndicePorID(maestroLotes, ocupado, capacidadMaestro, id);
                 if (idx == -1) {
-                    cout << "El ID no existe en el maestro.\n";
+                    std::cout << "El ID no existe en el maestro.\n";
                     break;
                 }
-                cout << "Resultado (1=Aprob, 0=Rech): "; cin >> res;
+                std::cout << "Resultado (1=Aprob, 0=Rech): "; std::cin >> res;
                 res = (res != 0) ? 1 : 0;
 
                 pushInspeccion(pila, id, res);
-                cout << "Inspeccion Lote " << id << " (" << maestroLotes[idx].nombreComponente
-                     << "): Resultado " << (res == 1 ? "Aprobado (1)" : "Rechazado (0)") << ".\n";
-                cout << "Evento PUSH a Pila: Lote " << id << " | Resultado " << res << ".\n";
+                std::cout << "Inspeccion Lote " << id << " (" << maestroLotes[idx].nombreComponente
+                          << "): Resultado " << (res == 1 ? "Aprobado (1)" : "Rechazado (0)") << ".\n";
+                std::cout << "Evento PUSH a Pila: Lote " << id << " | Resultado " << res << ".\n";
                 break;
             }
             case 4: {
                 int id, res;
                 if (popInspeccion(pila, id, res)) {
-                    cout << "POP de Pila: Evento Lote " << id << " | Resultado "
-                         << (res == 1 ? "Aprobado (1)" : "Rechazado (0)") << ".\n";
-                    cout << "Historial de inspeccion revertido.\n";
+                    std::cout << "POP de Pila: Evento Lote " << id << " | Resultado "
+                              << (res == 1 ? "Aprobado (1)" : "Rechazado (0)") << ".\n";
+                    std::cout << "Historial de inspeccion revertido.\n";
                 } else {
-                    cout << "La pila esta vacia.\n";
+                    std::cout << "La pila esta vacia.\n";
                 }
                 break;
             }
             case 5: {
-                if (!inicializado) { cout << "Debe inicializar el almacen primero.\n"; break; }
-                int fila; cout << "Fila a reportar: "; cin >> fila;
-                if (fila < 0 || fila >= F) { cout << "Fila fuera de rango.\n"; break; }
+                if (!inicializado) { std::cout << "Debe inicializar el almacen primero.\n"; break; }
+                int fila; std::cout << "Fila a reportar: "; std::cin >> fila;
+                if (fila < 0 || fila >= F) { std::cout << "Fila fuera de rango.\n"; break; }
                 reportePorFila(almacen, F, C, fila);
                 break;
             }
+            case 6: {
+                if (!inicializado) { std::cout << "Debe inicializar el almacen primero.\n"; break; }
+                std::string nombre; leerLinea("Nombre de componente a buscar: ", nombre);
+                buscarPorComponente(almacen, F, C, nombre.c_str());
+                break;
+            }
             case 7: {
+                if (!inicializado) { std::cout << "Debe inicializar el almacen primero.\n"; break; }
+                int nuevoF, nuevoC;
+                std::cout << "Nuevo F: "; std::cin >> nuevoF;
+                std::cout << "Nuevo C: "; std::cin >> nuevoC;
+                if (nuevoF <= 0 || nuevoC <= 0) { std::cout << "Dimensiones invalidas.\n"; break; }
+                if (redimensionarAlmacen(almacen, F, C, nuevoF, nuevoC)) {
+                    std::cout << "Almacen redimensionado a " << F << "x" << C << ".\n";
+                } else {
+                    std::cout << "No se pudo redimensionar.\n";
+                }
+                break;
+            }
+            case 8: {
                 salir = true;
                 break;
             }
             default:
-                cout << "Opcion invalida.\n";
+                std::cout << "Opcion invalida.\n";
         }
     }
 
     // Liberacion de memoria
-    cout << "Liberando memoria de estructuras LoteProduccion...\n";
-    cout << "Liberando memoria de Matriz 2D...\n";
+    std::cout << "Liberando memoria de estructuras LoteProduccion...\n";
+    std::cout << "Liberando memoria de Matriz 2D...\n";
     liberarAlmacen(almacen, F);
-    cout << "Liberando memoria de Pila y Vectores Paralelos...\n";
+    std::cout << "Liberando memoria de Pila y Vectores Paralelos...\n";
     liberarPila(pila);
     liberarMaestro(maestroLotes, ocupado);
-    cout << "¡Memoria libre! Sistema terminado.\n";
+    std::cout << "Memoria libre! Sistema terminado.\n";
     
     return 0;
 }
